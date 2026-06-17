@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('node:fs').cpSync('manifests','dist/manifests',{recursive:true})\"",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {

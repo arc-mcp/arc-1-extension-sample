@@ -2,11 +2,10 @@
 
 A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **no ABAP**.
 
-> ⚠️ This targets the **`@experimental` `arc-1/public` API that does not exist yet**. It is a
-> forward-looking sample + smoke test for the extension framework being built in arc-1
-> (`docs/research/extension-framework-spec.md`). It typechecks against the local stub in
-> `src/public-stub.d.ts` until the real `arc-1/public` ships (PR1–PR2) — then delete the stub
-> and rely on the `arc-1` peer dependency.
+> Consumes the **`@experimental` `arc-1/public` API**. It is the smoke test for the FEAT-61
+> extension framework (`arc-1` `docs/research/extension-framework-spec.md`). **Verified live
+> against a real S/4HANA system** — both tiers return real SAP source. The API may break in any
+> release (it declares `apiVersion`).
 
 ## What it demonstrates
 
@@ -19,10 +18,17 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 
 All read-only. Every call goes through the gated `ctx.http` → `checkOperation` + scope + audit.
 
-## How it will be loaded
+## Build + load
 
-```
-ARC1_PLUGINS=/abs/path/to/arc1-plugin-example/dist/index.js  arc1 --http-streamable
+```sh
+# 1. link the local arc-1 build (until arc-1 is published with the public API)
+( cd /path/to/arc-1 && npm link )
+npm install && npm link arc-1 && npm run build
+
+# 2. load into an arc-1 instance…
+ARC1_PLUGINS=$PWD/dist/index.js  arc1 --http-streamable
+# …or drive one call via the CLI:
+ARC1_PLUGINS=$PWD/dist/index.js  arc1-cli call Custom_ProgramLineCount --json '{"name":"RSPARAM"}'
 ```
 
 ## Conventions (per the spec)
@@ -34,5 +40,6 @@ ARC1_PLUGINS=/abs/path/to/arc1-plugin-example/dist/index.js  arc1 --http-streama
 
 ## Status
 
-Cannot run until arc-1 ships the extension framework (PR1–PR3). Until then this is the design
-reference and the target for `npm run typecheck`.
+**Working + live-verified** against a4h (S/4HANA 2023): code-tier `Custom_ProgramLineCount` and
+manifest-tier `Custom_ReadProgram` both return real ABAP source through the gated `ctx.http`.
+The third (non-ADT/non-OData) tool is still TBD.
