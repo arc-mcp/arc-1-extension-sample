@@ -1,0 +1,22 @@
+{
+  "name": "arc1-plugin-example",
+  "version": "0.0.1",
+  "description": "Sample ARC-1 extension plugin (playground). Pure TS, no ABAP. Targets the @experimental arc-1/public API.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "arc-1": ">=0.10.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "zod": "^4.0.0"
+  },
+  "arc1": {
+    "apiVersion": 1,
+    "requires": { "scopes": ["read"], "packages": [] }
+  }
+}

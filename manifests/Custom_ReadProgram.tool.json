@@ -1,0 +1,18 @@
+{
+  "name": "Custom_ReadProgram",
+  "description": "Read an ABAP program's source (declarative, read-only).",
+  "scope": "read",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["name"],
+    "properties": { "name": { "type": "string", "pattern": "^[A-Za-z0-9_/]{1,40}$" } }
+  },
+  "request": {
+    "method": "GET",
+    "path": "/sap/bc/adt/programs/programs/{name}/source/main",
+    "pathParams": { "name": "$.name" },
+    "accept": "text/plain"
+  },
+  "response": { "maxBytes": 50000 }
+}
