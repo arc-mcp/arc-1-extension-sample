@@ -16,7 +16,9 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 | `Custom_ReadProgram` | ADT | **manifest tier** (declarative JSON) |
 | _(TBD — Q-O)_ | a non-ADT/non-OData SAP API | code tier — endpoint to be chosen |
 
-All read-only. Every call goes through the gated `ctx.http` → `checkOperation` + scope + audit.
+All read-only. Every call goes through the gated `ctx.http` (**`GET`/`HEAD` only in v1**) →
+`checkOperation` + scope + audit. Write support is a **v2** item (a package-aware `ctx.write`
+vocabulary) — see `arc-1` `docs/research/extension-framework-v2-spec.md`.
 
 ## Build + load
 
@@ -35,7 +37,9 @@ ARC1_PLUGINS=$PWD/dist/index.js  arc1-cli call Custom_ProgramLineCount --json '{
 
 - Tool names are `Custom_*` (reserved namespace; collisions fail-fast at load).
 - Each tool declares `policy: { scope, opType }` — gated exactly like a built-in (reuses the 7 scopes + allow\* ceiling; **no custom scopes**).
-- `package.json#arc1.requires` declares the scopes/packages the plugin needs — **intersected** with the server ceiling, never expands it.
+- `package.json#arc1.requires` declares the scopes/packages the plugin needs. This is a **v2**
+  declaration (intersected with the server ceiling, never expands it) — **not yet enforced in v1**,
+  where the runtime scope + safety ceiling already gate every call. Kept here as a forward example.
 - Pure TS — **no ABAP artifacts**. Custom endpoints (if any) must already exist on the SAP system.
 
 ## Status
