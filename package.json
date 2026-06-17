@@ -1,5 +1,5 @@
 {
-  "name": "arc1-plugin-example",
+  "name": "arc-1-extension-sample",
   "version": "0.0.1",
   "description": "Sample ARC-1 extension plugin (playground). Pure TS, no ABAP. Targets the @experimental arc-1/public API.",
   "type": "module",

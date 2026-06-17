@@ -1,4 +1,4 @@
-# arc1-plugin-example
+# arc-1-extension-sample
 
 A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **no ABAP**.
 
