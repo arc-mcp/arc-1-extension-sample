@@ -14,11 +14,28 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 | `Custom_ProgramLineCount` | ADT (`/sap/bc/adt/...`) | code tier (GET + logic) |
 | `Custom_QuerySalesOrders` | OData (`ZGWSAMPLE_BASIC`) | code tier (GET, `Accept: application/json`) |
 | `Custom_ReadProgram` | ADT | **manifest tier** (declarative JSON) |
-| _(TBD — Q-O)_ | a non-ADT/non-OData SAP API | code tier — endpoint to be chosen |
+| `Custom_RunClass` | ADT classrun | code tier — **executes** an `IF_OO_ADT_CLASSRUN` console class |
 
-All read-only. Every call goes through the gated `ctx.http` (**`GET`/`HEAD` only in v1**) →
-`checkOperation` + scope + audit. Write support is a **v2** item (a package-aware `ctx.write`
-vocabulary) — see `arc-1` `docs/research/extension-framework-v2-spec.md`.
+The three read tools go through the gated `ctx.http` (**`GET`/`HEAD` only in v1**) → `checkOperation` +
+scope + audit. `Custom_RunClass` is the one **privileged** tool: it runs a console class via
+`ctx.run.classRun` (a named, gated op — not a raw POST). General write support is a **v2** item (a
+package-aware `ctx.write` vocabulary) — see `arc-1` `docs/research/extension-framework-v2-spec.md`.
+
+### Running `Custom_RunClass`
+
+Executing ABAP is gated — **all** of these are required (else the call is refused):
+
+```sh
+# the class must implement IF_OO_ADT_CLASSRUN; e.g. create ZCL_ARC1_RUN_DEMO with a main( ) that
+# calls out->write( ... ), then:
+SAP_ALLOW_PLUGIN_EXECUTE=true SAP_ALLOW_WRITES=true \
+  ARC1_PLUGINS=$PWD/dist/index.js \
+  arc1-cli call Custom_RunClass --json '{"className":"ZCL_ARC1_RUN_DEMO"}'
+# → the class's console output (out->write) as text
+```
+
+The tool declares `policy.scope: 'write'`, so the caller also needs the `write` scope. **Live-verified
+against a4h (S/4HANA 2023)** — returns the real console output; with the opt-in off it is refused.
 
 ## Build + load
 
@@ -45,5 +62,6 @@ ARC1_PLUGINS=$PWD/dist/index.js  arc1-cli call Custom_ProgramLineCount --json '{
 ## Status
 
 **Working + live-verified** against a4h (S/4HANA 2023): code-tier `Custom_ProgramLineCount` and
-manifest-tier `Custom_ReadProgram` both return real ABAP source through the gated `ctx.http`.
-The third (non-ADT/non-OData) tool is still TBD.
+manifest-tier `Custom_ReadProgram` return real ABAP source through the gated `ctx.http`, and
+`Custom_RunClass` executes a console class (`ctx.run.classRun`) and returns its real output — with the
+three safety gates (opt-in off / `allowWrites` off / bad class name) all refusing as expected.
