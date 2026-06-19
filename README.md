@@ -16,30 +16,38 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 | `Custom_ReadProgram` | ADT | **manifest tier** (declarative JSON) |
 | `Custom_RunClass` | ADT classrun | code tier — **executes** an `IF_OO_ADT_CLASSRUN` console class |
 | `Custom_CreateSalesOrder` | OData (`GWSAMPLE_BASIC`) | code tier — **writes** (`ctx.http.post`, gated; HTTP 201 verified) |
-| `Custom_SetTranslation` | custom ICF ([LISA](https://github.com/ClementRingot/LISA) `ZI18N_SERVICE`) | code tier — **writes** a translation (gated; HTTP 200 verified) |
+| `Custom_ListLanguages` | custom ICF ([LISA](https://github.com/ClementRingot/LISA) `ZI18N_SERVICE`) | code tier — list languages (POST; HTTP 200 verified) |
+| `Custom_GetTranslation` | custom ICF (LISA `ZI18N_SERVICE`) | code tier — read a translation (POST; HTTP 200 verified) |
+| `Custom_SetTranslation` | custom ICF (LISA `ZI18N_SERVICE`) | code tier — **write** a translation (POST; HTTP 200 verified) |
 
 Reads go through the gated `ctx.http` (`GET`/`HEAD`) → `checkOperation` + scope + audit.
 `Custom_RunClass` runs a console class via `ctx.run.classRun` (a named, gated op).
-`Custom_CreateSalesOrder` and `Custom_SetTranslation` **write** via `ctx.http.post` to a non-ADT path
+`Custom_CreateSalesOrder` and the LISA tools **write** via `ctx.http.post` to a non-ADT path
 (OData / custom ICF). ADT **object** writes (CLAS/DDLS/…) stay a **v2** item (the package-aware
 `ctx.write` vocabulary) — see `arc-1` `docs/research/extension-framework-v2-spec.md`.
 
-### Integrating LISA (`Custom_SetTranslation`)
+### Integrating LISA (`Custom_ListLanguages` / `GetTranslation` / `SetTranslation`)
 
 [LISA](https://github.com/ClementRingot/LISA) is a translation MCP server backed by a custom ABAP ICF
-service (`ZCL_I18N_SERVICE` → `POST /sap/bc/http/sap/ZI18N_SERVICE/<action>`). `Custom_SetTranslation`
-shows that its **write** flow runs directly as an ARC-1 extension — a gated `ctx.http.post` to that
-non-ADT path. Import LISA's handler class first, then:
+service (`ZCL_I18N_SERVICE` → `POST /sap/bc/http/sap/ZI18N_SERVICE/<action>`, JSON body). These three
+tools run LISA's full read → write → read-back flow **directly as ARC-1 extension tools** — gated
+`ctx.http.post` to that non-ADT path. Import LISA's handler class first, then:
 
 ```sh
-SAP_ALLOW_PLUGIN_RAW_WRITES=true SAP_ALLOW_WRITES=true \
-  ARC1_PLUGINS=$PWD/dist/index.js \
-  arc1-cli call Custom_SetTranslation --json '{"objectName":"ZARC1_I18N","language":"DE","transport":"A4HK9xxxxx","texts":[{"attribute":"short_field_label","value":"Hallo"}]}'
-# → HTTP 200, translation written into the transport (live-verified on a4h / S/4HANA 2023).
+# all LISA tools need the write opt-ins (see the note below):
+ENV="SAP_ALLOW_PLUGIN_RAW_WRITES=true SAP_ALLOW_WRITES=true ARC1_PLUGINS=$PWD/dist/index.js"
+
+env $ENV arc1-cli call Custom_ListLanguages --json '{}'
+env $ENV arc1-cli call Custom_GetTranslation --json '{"objectName":"BUKRS","language":"EN"}'
+env $ENV arc1-cli call Custom_SetTranslation --json '{"objectName":"ZARC1_I18N","language":"DE","transport":"A4HK9xxxxx","texts":[{"attribute":"short_field_label","value":"Hallo"}]}'
+# → HTTP 200; the write records into the transport (live-verified on a4h / S/4HANA 2023).
 ```
 
-LISA's read actions (`list_languages`, `get_translation`, `capabilities`) are also POSTs and work the
-same way — so all of LISA is reachable as ARC-1 extension tools.
+> **Why even the read tools need `SAP_ALLOW_PLUGIN_RAW_WRITES` + `scope: 'write'`:** LISA exposes
+> *every* action — including reads — as a `POST`. `ctx.http` gates by HTTP method, so any `POST`
+> needs the write opt-in regardless of what it semantically does. That's a consequence of LISA's API
+> design, not ARC-1's; the read tools declare `opType: Read` to keep the operation honest.
+> `set_translation` requires a real (open) transport — LISA records the write into it.
 
 ### Running `Custom_CreateSalesOrder` (gated non-ADT write)
 
