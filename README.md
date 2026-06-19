@@ -12,14 +12,53 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 | Tool | SAP API | Style |
 |------|---------|-------|
 | `Custom_ProgramLineCount` | ADT (`/sap/bc/adt/...`) | code tier (GET + logic) |
-| `Custom_QuerySalesOrders` | OData (`ZGWSAMPLE_BASIC`) | code tier (GET, `Accept: application/json`) |
+| `Custom_QuerySalesOrders` | OData (`GWSAMPLE_BASIC`) | code tier (GET, `Accept: application/json`) |
 | `Custom_ReadProgram` | ADT | **manifest tier** (declarative JSON) |
 | `Custom_RunClass` | ADT classrun | code tier — **executes** an `IF_OO_ADT_CLASSRUN` console class |
+| `Custom_CreateSalesOrder` | OData (`GWSAMPLE_BASIC`) | code tier — **writes** (`ctx.http.post`, gated; HTTP 201 verified) |
+| `Custom_ListLanguages` | custom ICF ([LISA](https://github.com/ClementRingot/LISA) `ZI18N_SERVICE`) | code tier — list languages (POST; HTTP 200 verified) |
+| `Custom_GetTranslation` | custom ICF (LISA `ZI18N_SERVICE`) | code tier — read a translation (POST; HTTP 200 verified) |
+| `Custom_SetTranslation` | custom ICF (LISA `ZI18N_SERVICE`) | code tier — **write** a translation (POST; HTTP 200 verified) |
 
-The three read tools go through the gated `ctx.http` (**`GET`/`HEAD` only in v1**) → `checkOperation` +
-scope + audit. `Custom_RunClass` is the one **privileged** tool: it runs a console class via
-`ctx.run.classRun` (a named, gated op — not a raw POST). General write support is a **v2** item (a
-package-aware `ctx.write` vocabulary) — see `arc-1` `docs/research/extension-framework-v2-spec.md`.
+Reads go through the gated `ctx.http` (`GET`/`HEAD`) → `checkOperation` + scope + audit.
+`Custom_RunClass` runs a console class via `ctx.run.classRun` (a named, gated op).
+`Custom_CreateSalesOrder` and the LISA tools **write** via `ctx.http.post` to a non-ADT path
+(OData / custom ICF). ADT **object** writes (CLAS/DDLS/…) stay a **v2** item (the package-aware
+`ctx.write` vocabulary) — see `arc-1` `docs/research/extension-framework-v2-spec.md`.
+
+### Integrating LISA (`Custom_ListLanguages` / `GetTranslation` / `SetTranslation`)
+
+[LISA](https://github.com/ClementRingot/LISA) is a translation MCP server backed by a custom ABAP ICF
+service (`ZCL_I18N_SERVICE` → `POST /sap/bc/http/sap/ZI18N_SERVICE/<action>`, JSON body). These three
+tools run LISA's full read → write → read-back flow **directly as ARC-1 extension tools** — gated
+`ctx.http.post` to that non-ADT path. Import LISA's handler class first, then:
+
+```sh
+# all LISA tools need the write opt-ins (see the note below):
+ENV="SAP_ALLOW_PLUGIN_RAW_WRITES=true SAP_ALLOW_WRITES=true ARC1_PLUGINS=$PWD/dist/index.js"
+
+env $ENV arc1-cli call Custom_ListLanguages --json '{}'
+env $ENV arc1-cli call Custom_GetTranslation --json '{"objectName":"BUKRS","language":"EN"}'
+env $ENV arc1-cli call Custom_SetTranslation --json '{"objectName":"ZARC1_I18N","language":"DE","transport":"A4HK9xxxxx","texts":[{"attribute":"short_field_label","value":"Hallo"}]}'
+# → HTTP 200; the write records into the transport (live-verified on a4h / S/4HANA 2023).
+```
+
+> **Why even the read tools need `SAP_ALLOW_PLUGIN_RAW_WRITES` + `scope: 'write'`:** LISA exposes
+> *every* action — including reads — as a `POST`. `ctx.http` gates by HTTP method, so any `POST`
+> needs the write opt-in regardless of what it semantically does. That's a consequence of LISA's API
+> design, not ARC-1's; the read tools declare `opType: Read` to keep the operation honest.
+> `set_translation` requires a real (open) transport — LISA records the write into it.
+
+### Running `Custom_CreateSalesOrder` (gated non-ADT write)
+
+```sh
+# needs BOTH opt-ins + a write-scoped tool (the tool declares scope:'write'):
+SAP_ALLOW_PLUGIN_RAW_WRITES=true SAP_ALLOW_WRITES=true \
+  ARC1_PLUGINS=$PWD/dist/index.js \
+  arc1-cli call Custom_CreateSalesOrder --json '{"note":"hello"}'
+# → HTTP 201 + the created SalesOrder (live-verified on a4h / S/4HANA 2023).
+# With either opt-in off the call is refused; a write to a /sap/bc/adt/ path is always refused.
+```
 
 ### Running `Custom_RunClass`
 
