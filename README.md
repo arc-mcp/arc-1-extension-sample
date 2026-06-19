@@ -12,10 +12,10 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 | Tool | SAP API | Style |
 |------|---------|-------|
 | `Custom_ProgramLineCount` | ADT (`/sap/bc/adt/...`) | code tier (GET + logic) |
-| `Custom_QuerySalesOrders` | OData (`ZGWSAMPLE_BASIC`) | code tier (GET, `Accept: application/json`) |
+| `Custom_QuerySalesOrders` | OData (`GWSAMPLE_BASIC`) | code tier (GET, `Accept: application/json`) |
 | `Custom_ReadProgram` | ADT | **manifest tier** (declarative JSON) |
 | `Custom_RunClass` | ADT classrun | code tier — **executes** an `IF_OO_ADT_CLASSRUN` console class |
-| `Custom_CreateSalesOrder` | OData (`ZGWSAMPLE_BASIC`) | code tier — **writes** (`ctx.http.post`, gated) |
+| `Custom_CreateSalesOrder` | OData (`GWSAMPLE_BASIC`) | code tier — **writes** (`ctx.http.post`, gated; HTTP 201 verified) |
 
 Reads go through the gated `ctx.http` (`GET`/`HEAD`) → `checkOperation` + scope + audit.
 `Custom_RunClass` runs a console class via `ctx.run.classRun` (a named, gated op).
@@ -31,8 +31,8 @@ pattern a **LISA-style custom-ICF write tool** uses (POST to `/sap/bc/http/sap/y
 SAP_ALLOW_PLUGIN_RAW_WRITES=true SAP_ALLOW_WRITES=true \
   ARC1_PLUGINS=$PWD/dist/index.js \
   arc1-cli call Custom_CreateSalesOrder --json '{"note":"hello"}'
-# → HTTP <status> + the service response. With either opt-in off, the call is refused.
-# (ZGWSAMPLE_BASIC must be activated in /IWFND for a 2xx; the gating + CSRF + POST path works regardless.)
+# → HTTP 201 + the created SalesOrder (live-verified on a4h / S/4HANA 2023).
+# With either opt-in off the call is refused; a write to a /sap/bc/adt/ path is always refused.
 ```
 
 ### Running `Custom_RunClass`
