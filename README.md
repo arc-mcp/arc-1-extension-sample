@@ -15,11 +15,25 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 | `Custom_QuerySalesOrders` | OData (`ZGWSAMPLE_BASIC`) | code tier (GET, `Accept: application/json`) |
 | `Custom_ReadProgram` | ADT | **manifest tier** (declarative JSON) |
 | `Custom_RunClass` | ADT classrun | code tier — **executes** an `IF_OO_ADT_CLASSRUN` console class |
+| `Custom_CreateSalesOrder` | OData (`ZGWSAMPLE_BASIC`) | code tier — **writes** (`ctx.http.post`, gated) |
 
-The three read tools go through the gated `ctx.http` (**`GET`/`HEAD` only in v1**) → `checkOperation` +
-scope + audit. `Custom_RunClass` is the one **privileged** tool: it runs a console class via
-`ctx.run.classRun` (a named, gated op — not a raw POST). General write support is a **v2** item (a
-package-aware `ctx.write` vocabulary) — see `arc-1` `docs/research/extension-framework-v2-spec.md`.
+Reads go through the gated `ctx.http` (`GET`/`HEAD`) → `checkOperation` + scope + audit.
+`Custom_RunClass` runs a console class via `ctx.run.classRun` (a named, gated op).
+`Custom_CreateSalesOrder` **writes** via `ctx.http.post` to a non-ADT (OData) path — the same gated
+pattern a **LISA-style custom-ICF write tool** uses (POST to `/sap/bc/http/sap/your_service`). ADT
+**object** writes (CLAS/DDLS/…) stay a **v2** item (the package-aware `ctx.write` vocabulary) — see
+`arc-1` `docs/research/extension-framework-v2-spec.md`.
+
+### Running `Custom_CreateSalesOrder` (gated non-ADT write)
+
+```sh
+# needs BOTH opt-ins + a write-scoped tool (the tool declares scope:'write'):
+SAP_ALLOW_PLUGIN_RAW_WRITES=true SAP_ALLOW_WRITES=true \
+  ARC1_PLUGINS=$PWD/dist/index.js \
+  arc1-cli call Custom_CreateSalesOrder --json '{"note":"hello"}'
+# → HTTP <status> + the service response. With either opt-in off, the call is refused.
+# (ZGWSAMPLE_BASIC must be activated in /IWFND for a 2xx; the gating + CSRF + POST path works regardless.)
+```
 
 ### Running `Custom_RunClass`
 
