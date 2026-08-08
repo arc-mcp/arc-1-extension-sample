@@ -1,7 +1,7 @@
 import { Client } from 'open-rfc';
 import { z } from 'zod';
 import { defineTool, OperationType } from 'arc-1/public';
-import { pickDisclosedFields, redactRfcError } from './rfc-redact.js';
+import { isConnectivityServiceBound, pickDisclosedFields, redactRfcError } from './rfc-redact.js';
 
 // Classic RFC from an ARC-1 extension — and the security work that has to come with it.
 //
@@ -64,6 +64,19 @@ export default defineTool({
   async handler(_args, ctx) {
     if (process.env[ENABLE_FLAG] !== 'true') {
       throw new Error(`${ENABLE_FLAG} is not set to 'true' — this ARC-1 instance does not permit RFC calls.`);
+    }
+
+    // CONTROL 8: fail closed on BTP. ARC-1 on Cloud Foundry reaches on-premise SAP through the
+    // Cloud Connector, and open-rfc 0.2.2 cannot use that route — the classic Client silently
+    // ignores connectivity-proxy parameters and dials the backend direct. Refuse rather than make
+    // an unintended direct connection attempt. See isConnectivityServiceBound().
+    if (isConnectivityServiceBound(process.env.VCAP_SERVICES)) {
+      throw new Error(
+        'This ARC-1 instance is bound to the BTP Connectivity service, so RFC would have to traverse ' +
+          'the Cloud Connector — a route open-rfc does not yet implement. Refusing rather than ' +
+          'attempting a direct connection to the backend. Run this tool from an ARC-1 instance with ' +
+          'network access to the SAP gateway instead.',
+      );
     }
 
     const missing = Object.values(ENV).filter((name) => !process.env[name]);

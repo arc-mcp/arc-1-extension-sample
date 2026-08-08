@@ -3,7 +3,12 @@
 // stdlib `node:test` — no framework, no SAP system needed. Run: npm test
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DISCLOSED_FIELDS, pickDisclosedFields, redactRfcError } from '../dist/tools/rfc-redact.js';
+import {
+  DISCLOSED_FIELDS,
+  isConnectivityServiceBound,
+  pickDisclosedFields,
+  redactRfcError,
+} from '../dist/tools/rfc-redact.js';
 
 test('discloses only allowlisted fields, trimmed', () => {
   const picked = pickDisclosedFields({
@@ -40,6 +45,24 @@ test('redaction keeps the classification key but never the error message', () =>
   assert.match(redacted, /NI_CONNECT_FAILED/);
   assert.ok(!redacted.includes('vhcalhost'), 'must not leak the host');
   assert.ok(!redacted.includes('3300'), 'must not leak the port');
+});
+
+test('detects a bound Connectivity service so the tool can refuse the Cloud Connector route', () => {
+  const bound = JSON.stringify({ connectivity: [{ name: 'arc1-connectivity' }], xsuaa: [{}] });
+  assert.equal(isConnectivityServiceBound(bound), true);
+  // Case-insensitive on the service label.
+  assert.equal(isConnectivityServiceBound(JSON.stringify({ Connectivity: [{}] })), true);
+});
+
+test('no Connectivity binding means the direct RFC route is intended', () => {
+  assert.equal(isConnectivityServiceBound(undefined), false);
+  assert.equal(isConnectivityServiceBound(''), false);
+  assert.equal(isConnectivityServiceBound(JSON.stringify({ destination: [{}], xsuaa: [{}] })), false);
+});
+
+test('unparseable VCAP_SERVICES fails closed', () => {
+  // Still Cloud Foundry — refusing beats an unintended direct dial to an on-premise host.
+  assert.equal(isConnectivityServiceBound('{not json'), true);
 });
 
 test('redaction handles errors without a key, and non-errors', () => {

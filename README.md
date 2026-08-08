@@ -129,6 +129,28 @@ Two things that set is chosen to **exclude**:
 Beyond authorization, classic RFC is **cleartext**: keep it on a trusted network segment, or put SNC
 in front of it. Treat the RFC user as a shared service identity and give it nothing it does not need.
 
+### BTP / Cloud Connector: not yet, and the tool refuses
+
+ARC-1 on Cloud Foundry reaches on-premise SAP through the **Cloud Connector**, via the Connectivity
+service's SOCKS5 proxy. **open-rfc 0.2.2 cannot use that route.** Its SOCKS5 connectivity transport
+is, in its own changelog, "an implementation preview outside the first beta support contract", and
+no connection path imports it. Verified against the published package:
+
+| Path | Behaviour when given `connectivity_proxy_*` parameters |
+|---|---|
+| modern `RFCClient` | fails closed — `Missing RFC connection provider capabilities: connectivity-rfc-proxy, connectivity-proxy-authorization` |
+| classic `Client` (used here) | **silently ignores them and dials the backend directly** |
+
+That second row is the hazard: on CF the tool would attempt a direct connection to an on-premise
+host instead of the tunnel — a confusing failure that invites someone to "fix" it by opening a
+firewall hole. So the tool **refuses when the BTP Connectivity service is bound** (`VCAP_SERVICES`),
+rather than dialing.
+
+Until open-rfc implements the route, run this tool from an ARC-1 instance with network access to
+the SAP gateway (on-premise, or a container in the same segment). Nothing else needs to change:
+ARC-1's MTA already binds the Connectivity service, so the path opens as soon as the connector
+supports it.
+
 ### Running `Custom_RfcSystemInfo`
 
 ```sh
