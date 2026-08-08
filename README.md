@@ -75,7 +75,7 @@ so the tool opens its **own socket** with its **own credentials**. Know exactly 
 |---|---|---|
 | Safety ceiling (`SAP_ALLOW_WRITES`, `SAP_ALLOWED_PACKAGES`, `denyActions`) | enforced on the call | **not enforced on the call** |
 | SAP identity | per-user via principal propagation | **one shared technical RFC user** |
-| Transport | HTTPS | **cleartext — classic RFC has no encryption and no peer authentication** |
+| Transport | HTTPS | classic RFC has no peer authentication; on CF it is carried inside the managed Connectivity / Cloud Connector tunnel |
 | Reachable surface | the one path the tool writes | **every remote-enabled FM that RFC user may call** |
 
 ARC-1 still gates *whether* the tool may be invoked (`policy.scope`, `denyActions`, audit). It does
@@ -129,27 +129,27 @@ Two things that set is chosen to **exclude**:
 Beyond authorization, classic RFC is **cleartext**: keep it on a trusted network segment, or put SNC
 in front of it. Treat the RFC user as a shared service identity and give it nothing it does not need.
 
-### BTP / Cloud Connector: not yet, and the tool refuses
+### BTP / Cloud Connector SOCKS5 route
 
-ARC-1 on Cloud Foundry reaches on-premise SAP through the **Cloud Connector**, via the Connectivity
-service's SOCKS5 proxy. **open-rfc 0.2.2 cannot use that route.** Its SOCKS5 connectivity transport
-is, in its own changelog, "an implementation preview outside the first beta support contract", and
-no connection path imports it. Verified against the published package:
+On Cloud Foundry the tool reads exactly one bound BTP Connectivity service, obtains a short-lived
+OAuth token with its client credentials, and passes open-rfc the documented SOCKS5 host/port/token
+tuple. `SAMPLE_RFC_GWHOST` and `SAMPLE_RFC_GWSERV` select a dedicated Cloud Connector **TCP**
+virtual mapping to the SAP gateway (`33NN`); `SAMPLE_RFC_ASHOST` remains the actual application
+server identity carried by CPIC. `SAMPLE_RFC_LOCATION_ID` is optional.
 
-| Path | Behaviour when given `connectivity_proxy_*` parameters |
-|---|---|
-| modern `RFCClient` | fails closed — `Missing RFC connection provider capabilities: connectivity-rfc-proxy, connectivity-proxy-authorization` |
-| classic `Client` (used here) | **silently ignores them and dials the backend directly** |
+This route requires open-rfc 0.3.0 or newer; the package dependency intentionally waits for that
+feature release rather than installing an unbuilt Git checkout.
 
-That second row is the hazard: on CF the tool would attempt a direct connection to an on-premise
-host instead of the tunnel — a confusing failure that invites someone to "fix" it by opening a
-firewall hole. So the tool **refuses when the BTP Connectivity service is bound** (`VCAP_SERVICES`),
-rather than dialing.
+This is deliberately not the Connectivity service's separate RFC-proxy endpoint. The generic TCP
+mapping is opaque, so Cloud Connector cannot enforce an RFC function-module resource allowlist on
+it. Restrict the mapping to trusted CF applications and enforce the function boundary with the
+dedicated technical user's exact `S_RFC` role described above. The tool still hardcodes one RFM and
+accepts no caller-controlled wire values.
 
-Until open-rfc implements the route, run this tool from an ARC-1 instance with network access to
-the SAP gateway (on-premise, or a container in the same segment). Nothing else needs to change:
-ARC-1's MTA already binds the Connectivity service, so the path opens as soon as the connector
-supports it.
+Binding selection and token handling fail closed: malformed or multiple Connectivity bindings,
+missing SOCKS5 credentials, an insecure token URL, an OAuth rejection, a partial route, or a token
+with a `Bearer ` prefix stops before the SAP socket opens. The token is cached only until shortly
+before expiry and is never included in tool output or inspected configuration.
 
 ### Running `Custom_RfcSystemInfo`
 
@@ -158,6 +158,10 @@ export SAMPLE_RFC_ENABLED=true
 export SAMPLE_RFC_ASHOST=your-app-server   SAMPLE_RFC_SYSNR=00
 export SAMPLE_RFC_CLIENT=001               SAMPLE_RFC_LANG=EN
 export SAMPLE_RFC_USER=RFC_READONLY        SAMPLE_RFC_PASSWD=...   # least-privilege user, see above
+
+# additionally on BTP CF, using the Cloud Connector TCP virtual mapping (not its internal target):
+export SAMPLE_RFC_GWHOST=virtual-rfc-host  SAMPLE_RFC_GWSERV=3300
+# export SAMPLE_RFC_LOCATION_ID=optional-location
 
 ARC1_PLUGINS=$PWD/dist/index.js arc1-cli call Custom_RfcSystemInfo --json '{}'
 # → RFCSYSID / RFCSAPRL / RFCKERNRL / RFCOPSYS / RFCDBSYS / RFCHOST / RFCTZONE

@@ -5,8 +5,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   DISCLOSED_FIELDS,
-  isConnectivityServiceBound,
+  getConnectivityAccessToken,
   pickDisclosedFields,
+  readConnectivityBinding,
   redactRfcError,
 } from '../dist/tools/rfc-redact.js';
 
@@ -47,22 +48,121 @@ test('redaction keeps the classification key but never the error message', () =>
   assert.ok(!redacted.includes('3300'), 'must not leak the port');
 });
 
-test('detects a bound Connectivity service so the tool can refuse the Cloud Connector route', () => {
-  const bound = JSON.stringify({ connectivity: [{ name: 'arc1-connectivity' }], xsuaa: [{}] });
-  assert.equal(isConnectivityServiceBound(bound), true);
-  // Case-insensitive on the service label.
-  assert.equal(isConnectivityServiceBound(JSON.stringify({ Connectivity: [{}] })), true);
+function connectivityVcap(overrides = {}) {
+  return JSON.stringify({
+    connectivity: [{
+      name: 'arc1-connectivity',
+      credentials: {
+        onpremise_proxy_host: 'proxy.fixture.invalid',
+        onpremise_socks5_proxy_port: '20004',
+        clientid: 'client-fixture',
+        clientsecret: 'secret-fixture',
+        token_service_url: 'https://token.fixture.invalid/oauth/token',
+        ...overrides,
+      },
+    }],
+    xsuaa: [{}],
+  });
+}
+
+test('admits exactly one redaction-safe Connectivity SOCKS5 binding', () => {
+  const binding = readConnectivityBinding(connectivityVcap());
+  assert.ok(binding);
+  assert.equal(binding.proxyHost, 'proxy.fixture.invalid');
+  assert.equal(binding.proxyPort, 20004);
+  assert.equal(binding.clientSecret, 'secret-fixture');
+  assert.ok(Object.isFrozen(binding));
+  assert.deepEqual(Object.keys(binding), []);
+  assert.ok(!JSON.stringify(binding).includes('secret-fixture'));
+  assert.ok(!JSON.stringify(binding).includes('client-fixture'));
 });
 
 test('no Connectivity binding means the direct RFC route is intended', () => {
-  assert.equal(isConnectivityServiceBound(undefined), false);
-  assert.equal(isConnectivityServiceBound(''), false);
-  assert.equal(isConnectivityServiceBound(JSON.stringify({ destination: [{}], xsuaa: [{}] })), false);
+  assert.equal(readConnectivityBinding(undefined), undefined);
+  assert.equal(readConnectivityBinding(''), undefined);
+  assert.equal(readConnectivityBinding(JSON.stringify({ destination: [{}], xsuaa: [{}] })), undefined);
 });
 
-test('unparseable VCAP_SERVICES fails closed', () => {
-  // Still Cloud Foundry — refusing beats an unintended direct dial to an on-premise host.
-  assert.equal(isConnectivityServiceBound('{not json'), true);
+test('malformed, ambiguous, or non-HTTPS Connectivity bindings fail closed', () => {
+  assert.throws(() => readConnectivityBinding('{not json'), /not valid JSON/);
+  assert.throws(
+    () => readConnectivityBinding(connectivityVcap({ token_service_url: 'http://token.fixture.invalid' })),
+    /must be an HTTPS URL/,
+  );
+  const twice = JSON.parse(connectivityVcap());
+  twice.connectivity.push(twice.connectivity[0]);
+  assert.throws(() => readConnectivityBinding(JSON.stringify(twice)), /Exactly one/);
+});
+
+test('requests and caches a raw Connectivity access token without leaking credentials', async () => {
+  const binding = readConnectivityBinding(connectivityVcap({
+    clientid: 'cache-client-fixture',
+    clientsecret: 'cache-secret-fixture',
+    token_service_url: 'https://cache-token.fixture.invalid',
+  }));
+  assert.ok(binding);
+  let calls = 0;
+  let currentTime = 1_000;
+  const fetchToken = async (url, init) => {
+    calls += 1;
+    assert.equal(url, 'https://cache-token.fixture.invalid/oauth/token');
+    assert.equal(init.method, 'POST');
+    assert.equal(init.body, 'grant_type=client_credentials');
+    assert.equal(init.redirect, 'error');
+    assert.equal(
+      Buffer.from(init.headers.authorization.slice('Basic '.length), 'base64').toString('utf8'),
+      'cache-client-fixture:cache-secret-fixture',
+    );
+    return new Response(JSON.stringify({ access_token: `access-token-${calls}`, expires_in: 100 }));
+  };
+
+  assert.equal(
+    await getConnectivityAccessToken(binding, { fetch: fetchToken, now: () => currentTime }),
+    'access-token-1',
+  );
+  assert.equal(
+    await getConnectivityAccessToken(binding, { fetch: fetchToken, now: () => currentTime }),
+    'access-token-1',
+  );
+  assert.equal(calls, 1);
+  currentTime = 92_000;
+  assert.equal(
+    await getConnectivityAccessToken(binding, { fetch: fetchToken, now: () => currentTime }),
+    'access-token-2',
+  );
+  assert.equal(calls, 2);
+});
+
+test('token-service failures expose status but not the response body', async () => {
+  const binding = readConnectivityBinding(connectivityVcap({
+    clientid: 'failure-client-fixture',
+    token_service_url: 'https://failure-token.fixture.invalid/oauth/token',
+  }));
+  assert.ok(binding);
+  await assert.rejects(
+    getConnectivityAccessToken(binding, {
+      fetch: async () => new Response('response-body-secret', { status: 401 }),
+    }),
+    (error) => {
+      assert.match(error.message, /HTTP 401/);
+      assert.ok(!error.message.includes('response-body-secret'));
+      return true;
+    },
+  );
+});
+
+test('rejects an oversized token response while streaming it', async () => {
+  const binding = readConnectivityBinding(connectivityVcap({
+    clientid: 'oversize-client-fixture',
+    token_service_url: 'https://oversize-token.fixture.invalid',
+  }));
+  assert.ok(binding);
+  await assert.rejects(
+    getConnectivityAccessToken(binding, {
+      fetch: async () => new Response('x'.repeat(65 * 1024)),
+    }),
+    /exceeded the size limit/,
+  );
 });
 
 test('redaction handles errors without a key, and non-errors', () => {

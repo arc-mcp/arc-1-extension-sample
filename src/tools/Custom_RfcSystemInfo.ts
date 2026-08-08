@@ -1,7 +1,12 @@
 import { Client } from 'open-rfc';
 import { z } from 'zod';
 import { defineTool, OperationType } from 'arc-1/public';
-import { isConnectivityServiceBound, pickDisclosedFields, redactRfcError } from './rfc-redact.js';
+import {
+  getConnectivityAccessToken,
+  pickDisclosedFields,
+  readConnectivityBinding,
+  redactRfcError,
+} from './rfc-redact.js';
 
 // Classic RFC from an ARC-1 extension — and the security work that has to come with it.
 //
@@ -38,12 +43,17 @@ const ENABLE_FLAG = 'SAMPLE_RFC_ENABLED';
 // least-privilege user (README has the S_RFC grant).
 const ENV = {
   ashost: 'SAMPLE_RFC_ASHOST',
+  gwhost: 'SAMPLE_RFC_GWHOST',
+  gwserv: 'SAMPLE_RFC_GWSERV',
   sysnr: 'SAMPLE_RFC_SYSNR',
   client: 'SAMPLE_RFC_CLIENT',
   user: 'SAMPLE_RFC_USER',
   passwd: 'SAMPLE_RFC_PASSWD',
   lang: 'SAMPLE_RFC_LANG',
+  locationId: 'SAMPLE_RFC_LOCATION_ID',
 } as const;
+
+const REQUIRED_DIRECT_ENV = [ENV.ashost, ENV.sysnr, ENV.client, ENV.user, ENV.passwd, ENV.lang];
 
 const CALL_TIMEOUT_SECONDS = 15; // open-rfc `Client` timeouts are in seconds; always bound the call.
 
@@ -66,20 +76,14 @@ export default defineTool({
       throw new Error(`${ENABLE_FLAG} is not set to 'true' — this ARC-1 instance does not permit RFC calls.`);
     }
 
-    // CONTROL 8: fail closed on BTP. ARC-1 on Cloud Foundry reaches on-premise SAP through the
-    // Cloud Connector, and open-rfc 0.2.2 cannot use that route — the classic Client silently
-    // ignores connectivity-proxy parameters and dials the backend direct. Refuse rather than make
-    // an unintended direct connection attempt. See isConnectivityServiceBound().
-    if (isConnectivityServiceBound(process.env.VCAP_SERVICES)) {
-      throw new Error(
-        'This ARC-1 instance is bound to the BTP Connectivity service, so RFC would have to traverse ' +
-          'the Cloud Connector — a route open-rfc does not yet implement. Refusing rather than ' +
-          'attempting a direct connection to the backend. Run this tool from an ARC-1 instance with ' +
-          'network access to the SAP gateway instead.',
-      );
-    }
-
-    const missing = Object.values(ENV).filter((name) => !process.env[name]);
+    // CONTROL 8: a Connectivity binding selects the explicit SOCKS5/TCP route. Binding selection,
+    // OAuth and the Cloud Connector virtual target are all required together; no value may vanish
+    // into a direct fallback.
+    const connectivity = readConnectivityBinding(process.env.VCAP_SERVICES);
+    const required = connectivity === undefined
+      ? REQUIRED_DIRECT_ENV
+      : [...REQUIRED_DIRECT_ENV, ENV.gwhost, ENV.gwserv];
+    const missing = required.filter((name) => !process.env[name]);
     if (missing.length > 0) {
       // Name the missing variables, never any value.
       throw new Error(`Missing RFC connection environment variables: ${missing.join(', ')}`);
@@ -93,6 +97,18 @@ export default defineTool({
       requestId: ctx.requestId,
     });
 
+    const connectivityRoute = connectivity === undefined
+      ? {}
+      : {
+          gwhost: process.env[ENV.gwhost],
+          gwserv: process.env[ENV.gwserv],
+          connectivity_socks5_proxy_host: connectivity.proxyHost,
+          connectivity_socks5_proxy_port: connectivity.proxyPort,
+          connectivity_socks5_access_token: await getConnectivityAccessToken(connectivity),
+          ...(process.env[ENV.locationId]
+            ? { connectivity_socks5_location_id: process.env[ENV.locationId] }
+            : {}),
+        };
     const client = new Client(
       {
         ashost: process.env[ENV.ashost],
@@ -101,6 +117,7 @@ export default defineTool({
         user: process.env[ENV.user],
         passwd: process.env[ENV.passwd],
         lang: process.env[ENV.lang],
+        ...connectivityRoute,
       },
       { timeout: CALL_TIMEOUT_SECONDS },
     );
