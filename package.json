@@ -6,12 +6,20 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && node -e \"require('node:fs').cpSync('manifests','dist/manifests',{recursive:true})\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": "^22.14.0 || ^24.0.0"
   },
   "peerDependencies": {
     "arc-1": ">=0.10.0"
   },
+  "dependencies": {
+    "open-rfc": "0.2.2"
+  },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.8.0",
     "zod": "^4.0.0"
   },

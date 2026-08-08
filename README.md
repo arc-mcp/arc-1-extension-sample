@@ -19,6 +19,7 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 | `Custom_ListLanguages` | custom ICF ([LISA](https://github.com/ClementRingot/LISA) `ZI18N_SERVICE`) | code tier — list languages (POST; HTTP 200 verified) |
 | `Custom_GetTranslation` | custom ICF (LISA `ZI18N_SERVICE`) | code tier — read a translation (POST; HTTP 200 verified) |
 | `Custom_SetTranslation` | custom ICF (LISA `ZI18N_SERVICE`) | code tier — **write** a translation (POST; HTTP 200 verified) |
+| `Custom_RfcSystemInfo` | **classic RFC** (`RFC_SYSTEM_INFO` via [open-rfc](https://github.com/marianfoo/open-rfc)) | code tier — read **off** `ctx.http`, so it brings its own controls ([below](#rfc-a-different-trust-boundary)) |
 
 Reads go through the gated `ctx.http` (`GET`/`HEAD`) → `checkOperation` + scope + audit.
 `Custom_RunClass` runs a console class via `ctx.run.classRun` (a named, gated op).
@@ -59,6 +60,89 @@ SAP_ALLOW_PLUGIN_RAW_WRITES=true SAP_ALLOW_WRITES=true \
 # → HTTP 201 + the created SalesOrder (live-verified on a4h / S/4HANA 2023).
 # With either opt-in off the call is refused; a write to a /sap/bc/adt/ path is always refused.
 ```
+
+## RFC: a different trust boundary
+
+`Custom_RfcSystemInfo` calls the read-only `RFC_SYSTEM_INFO` function module over **classic RFC**,
+using [open-rfc](https://github.com/marianfoo/open-rfc) — an SDK-free RFC client with **no native
+addon and no runtime dependencies**, which is what makes RFC-from-a-plugin possible at all (the
+NW RFC SDK never was).
+
+It is the one tool here that does **not** go through `ctx.http`. `ToolContext` has no RFC channel,
+so the tool opens its **own socket** with its **own credentials**. Know exactly what that changes:
+
+| | a `ctx.http` tool | this RFC tool |
+|---|---|---|
+| Safety ceiling (`SAP_ALLOW_WRITES`, `SAP_ALLOWED_PACKAGES`, `denyActions`) | enforced on the call | **not enforced on the call** |
+| SAP identity | per-user via principal propagation | **one shared technical RFC user** |
+| Transport | HTTPS | **cleartext — classic RFC has no encryption and no peer authentication** |
+| Reachable surface | the one path the tool writes | **every remote-enabled FM that RFC user may call** |
+
+ARC-1 still gates *whether* the tool may be invoked (`policy.scope`, `denyActions`, audit). It does
+**not** gate what the tool does once running. So the controls are the plugin's own:
+
+1. **The function module is a hardcoded constant, never a parameter.** This is the control that
+   matters most. A `Custom_RfcCall({ fm, params })` tool would hand any caller — or any
+   prompt-injected LLM — a generic RFC gateway into your backend. Don't build that one.
+2. **No inputs at all** (`z.object({})`). Nothing from the caller reaches the wire.
+3. **Default-off opt-in** — `SAMPLE_RFC_ENABLED=true`. ARC-1's ceiling does not reach RFC, so the
+   plugin ships its own gate, in the same shape as the server's `SAP_ALLOW_PLUGIN_*` opt-ins.
+4. **A dedicated credential namespace** — `SAMPLE_RFC_*`, deliberately *not* `SAP_USER`/
+   `SAP_PASSWORD`. Those are ARC-1's own ADT credentials; borrowing them would dial RFC as ARC-1's
+   HTTP identity instead of a least-privilege RFC user.
+5. **A response field allowlist.** `RFC_SYSTEM_INFO` also returns the database host and the server's
+   IPv4/IPv6 addresses. The tool discloses seven identifying fields and drops that topology.
+6. **Error redaction.** open-rfc messages can carry the backend endpoint (a failed connect reads
+   `failed to connect NI socket to <host>:<port>`). The caller gets a classification key; the full
+   error goes to the operator's stderr log.
+7. **Attribution logging.** SAP's log records only the shared technical user, so the tool logs the
+   MCP `userName` + `requestId` before dialing — that link exists nowhere else.
+8. **A bounded call** (15 s) and `close()` in `finally`.
+
+### Least-privilege `S_RFC` for this tool
+
+An RFC client needs authorization for the **metadata** function groups on top of the target FM —
+open-rfc reads the function interface before it can serialize the call. Verified on S/4HANA 2023: a
+user holding only `SRFC` logs on fine and then fails with `RFC_NO_AUTHORITY` on
+`RFC_GET_FUNCTION_INTERFACE`. Minimum grant (`S_RFC`, `ACTVT = 16`, `RFC_TYPE = FUGR`):
+
+| `RFC_NAME` | Why | Function modules |
+|---|---|---|
+| `SRFC` | the target FM | `RFC_SYSTEM_INFO`, `RFC_PING` |
+| `RFC1` | classic metadata | `RFC_GET_FUNCTION_INTERFACE` |
+| `SDIFRUNTIME` | DDIC field info for structure parameters | `DDIF_FIELDINFO_GET` |
+
+Add `RFC_METADATA` only if you want open-rfc's optimized metadata path. Function-group membership
+above was read live from `TFDIR`/`ENLFDIR` on S/4HANA 2023.
+
+Two things that set is chosen to **exclude**:
+
+- **`SDTX`** — the home of `RFC_READ_TABLE`, the classic mass-exfiltration RFM. Granting the three
+  groups above does not grant it. Never put `RFC_READ_TABLE` behind an MCP tool.
+- Everything else. `S_RFC` with `RFC_NAME = *` on a technical user is how RFC becomes dangerous.
+
+> **Caveat worth knowing:** many systems exempt `SRFC` from RFC authority checks entirely
+> (`auth/rfc_authority_check`). Where that is set, this tool succeeding proves the *connection*
+> works — it does **not** prove your `S_RFC` design is correct. Validate that with a function group
+> that is actually checked.
+
+Beyond authorization, classic RFC is **cleartext**: keep it on a trusted network segment, or put SNC
+in front of it. Treat the RFC user as a shared service identity and give it nothing it does not need.
+
+### Running `Custom_RfcSystemInfo`
+
+```sh
+export SAMPLE_RFC_ENABLED=true
+export SAMPLE_RFC_ASHOST=your-app-server   SAMPLE_RFC_SYSNR=00
+export SAMPLE_RFC_CLIENT=001               SAMPLE_RFC_LANG=EN
+export SAMPLE_RFC_USER=RFC_READONLY        SAMPLE_RFC_PASSWD=...   # least-privilege user, see above
+
+ARC1_PLUGINS=$PWD/dist/index.js arc1-cli call Custom_RfcSystemInfo --json '{}'
+# → RFCSYSID / RFCSAPRL / RFCKERNRL / RFCOPSYS / RFCDBSYS / RFCHOST / RFCTZONE
+# With SAMPLE_RFC_ENABLED unset the call is refused. Live-verified on a4h (S/4HANA 2023).
+```
+
+`npm test` runs the redaction + allowlist checks (`node:test`, no SAP system required).
 
 ### Running `Custom_RunClass`
 
