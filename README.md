@@ -138,10 +138,9 @@ tuple. `SAMPLE_RFC_GWHOST` and `SAMPLE_RFC_GWSERV` select a dedicated Cloud Conn
 virtual mapping to the SAP gateway (`33NN`); `SAMPLE_RFC_ASHOST` remains the actual application
 server identity carried by CPIC. `SAMPLE_RFC_LOCATION_ID` is optional.
 
-This route requires open-rfc 0.2.3 or newer; the package dependency intentionally waits for that
-feature release rather than installing an unbuilt Git checkout. It is pinned to exactly `0.2.3`,
-not a range. Until that version is published, installation from npm is expected to fail and this
-sample PR must remain draft.
+This route requires open-rfc 0.2.3 or newer. The package dependency is pinned to exactly `0.2.3`,
+not a range, so deployments use the reviewed release artifact published to npm rather than an
+unbuilt Git checkout or an automatically selected future version.
 
 This is deliberately not the Connectivity service's separate RFC-proxy endpoint. The generic TCP
 mapping is opaque, so Cloud Connector cannot enforce an RFC function-module resource allowlist on
