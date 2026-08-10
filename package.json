@@ -16,7 +16,7 @@
     "arc-1": ">=0.10.0"
   },
   "dependencies": {
-    "open-rfc": "^0.3.0"
+    "open-rfc": "0.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

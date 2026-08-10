@@ -110,6 +110,14 @@ export function readConnectivityBinding(vcapServices: string | undefined): Conne
   }
 
   const credentials = matches[0]!;
+  if (
+    typeof credentials.clientid !== 'string' || credentials.clientid.length === 0 ||
+    typeof credentials.clientsecret !== 'string' || credentials.clientsecret.length === 0
+  ) {
+    throw new Error(
+      'The RFC sample requires a client-secret Connectivity binding; X.509/mTLS bindings are not supported.',
+    );
+  }
   const tokenServiceUrl = bindingText(credentials.token_service_url, 'token_service_url');
   let parsedTokenUrl: URL;
   try {
@@ -276,7 +284,10 @@ export async function getConnectivityAccessToken(
 }
 
 export function redactRfcError(err: unknown): string {
-  const key = (err as { key?: unknown } | null)?.key;
-  if (typeof key === 'string' && key) return `RFC call failed (${key}). See the ARC-1 server log for details.`;
+  const candidate = (err as { key?: unknown; code?: unknown } | null)?.key ??
+    (err as { code?: unknown } | null)?.code;
+  if (typeof candidate === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/u.test(candidate)) {
+    return `RFC call failed (${candidate}). See the ARC-1 server log for details.`;
+  }
   return 'RFC call failed. See the ARC-1 server log for details.';
 }

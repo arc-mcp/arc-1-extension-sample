@@ -1,4 +1,4 @@
-// The two security-critical behaviours of the RFC sample: disclose only the allowlist, and never
+// The security-critical behaviours of the RFC sample: disclose only the allowlist, and never
 // let an open-rfc error message (which can carry the backend host:port) reach the MCP client.
 // stdlib `node:test` — no framework, no SAP system needed. Run: npm test
 import assert from 'node:assert/strict';
@@ -9,7 +9,7 @@ import {
   pickDisclosedFields,
   readConnectivityBinding,
   redactRfcError,
-} from '../dist/tools/rfc-redact.js';
+} from '../dist/tools/rfc-security.js';
 
 test('discloses only allowlisted fields, trimmed', () => {
   const picked = pickDisclosedFields({
@@ -92,6 +92,10 @@ test('malformed, ambiguous, or non-HTTPS Connectivity bindings fail closed', () 
   const twice = JSON.parse(connectivityVcap());
   twice.connectivity.push(twice.connectivity[0]);
   assert.throws(() => readConnectivityBinding(JSON.stringify(twice)), /Exactly one/);
+  assert.throws(
+    () => readConnectivityBinding(connectivityVcap({ clientsecret: undefined })),
+    /client-secret Connectivity binding/,
+  );
 });
 
 test('requests and caches a raw Connectivity access token without leaking credentials', async () => {
@@ -167,6 +171,10 @@ test('rejects an oversized token response while streaming it', async () => {
 
 test('redaction handles errors without a key, and non-errors', () => {
   assert.ok(!redactRfcError(new Error('Name or password is incorrect')).includes('password'));
+  assert.equal(
+    redactRfcError({ code: 'CONNECTIVITY_SOCKS5_CONNECT_REJECTED' }),
+    'RFC call failed (CONNECTIVITY_SOCKS5_CONNECT_REJECTED). See the ARC-1 server log for details.',
+  );
   for (const value of [undefined, null, 'boom', { key: 42 }]) {
     assert.match(redactRfcError(value), /^RFC call failed\./);
   }

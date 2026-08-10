@@ -127,7 +127,8 @@ Two things that set is chosen to **exclude**:
 > that is actually checked.
 
 Beyond authorization, classic RFC is **cleartext**: keep it on a trusted network segment, or put SNC
-in front of it. Treat the RFC user as a shared service identity and give it nothing it does not need.
+in front of clients that support it. This sample and open-rfc do **not** support SNC. Treat the RFC
+user as a shared service identity and give it nothing it does not need.
 
 ### BTP / Cloud Connector SOCKS5 route
 
@@ -138,18 +139,54 @@ virtual mapping to the SAP gateway (`33NN`); `SAMPLE_RFC_ASHOST` remains the act
 server identity carried by CPIC. `SAMPLE_RFC_LOCATION_ID` is optional.
 
 This route requires open-rfc 0.3.0 or newer; the package dependency intentionally waits for that
-feature release rather than installing an unbuilt Git checkout.
+feature release rather than installing an unbuilt Git checkout. It is pinned to exactly `0.3.0`,
+not a range. Until that version is published, installation from npm is expected to fail and this
+sample PR must remain draft.
 
 This is deliberately not the Connectivity service's separate RFC-proxy endpoint. The generic TCP
 mapping is opaque, so Cloud Connector cannot enforce an RFC function-module resource allowlist on
-it. Restrict the mapping to trusted CF applications and enforce the function boundary with the
-dedicated technical user's exact `S_RFC` role described above. The tool still hardcodes one RFM and
-accepts no caller-controlled wire values.
+it. Cloud Connector's Trusted Applications allowlist applies only to Neo, not Cloud Foundry. For CF,
+restrict who can create or consume Connectivity service bindings in the connected subaccount,
+isolate production and non-production subaccounts/spaces, expose one exact virtual host and gateway
+port, and enforce the function boundary with the dedicated technical user's exact `S_RFC` role
+described above. The tool still hardcodes one RFM and accepts no caller-controlled wire values.
+
+Configure Cloud Connector and CF in this order:
+
+1. Connect Cloud Connector to the BTP subaccount containing the ARC-1 CF application. Use a separate
+   production subaccount/connector configuration. Record its Location ID if one is configured.
+2. In Cloud Connector, add an **ABAP System** with protocol **TCP**. Do not select RFC or RFC SNC:
+   this sample uses the Connectivity SOCKS5/TCP endpoint, not the separate RFC proxy.
+3. Set the internal host to the S/4HANA application server reachable from Cloud Connector and the
+   internal port to its RFC gateway `33NN` (`3300` for system number `00`). Choose one virtual host
+   and one virtual port and do not expose a host or port range.
+4. In CF, create and bind one BTP Connectivity service instance to ARC-1 and restage the app. This
+   sample supports the default **client-secret** binding only. X.509/mTLS Connectivity bindings are
+   rejected explicitly because their token-acquisition flow is not implemented here.
+5. Set `SAMPLE_RFC_GWHOST` and `SAMPLE_RFC_GWSERV` to the Cloud Connector **virtual** values. Set
+   `SAMPLE_RFC_ASHOST` to the actual SAP application-server identity carried inside CPIC. Set
+   `SAMPLE_RFC_LOCATION_ID` only when it exactly matches the connector's Location ID.
+6. Keep the SAP technical user limited to the exact `S_RFC` function groups above. Restrict CF
+   org/space membership, service-key creation, binding operations, and deployment credentials:
+   possession of the Connectivity binding credentials is the application-side tunnel authority.
+
+The managed BTP-to-Cloud-Connector tunnel is TLS-protected. The internal
+Cloud-Connector-to-SAP-gateway hop still carries classic RFC without SNC or end-to-end peer
+authentication, so keep it on a trusted segmented network. Choosing TCP TLS is valid only when the
+mapped backend endpoint actually speaks the matching TLS protocol; it does not add SNC to an
+ordinary SAP gateway.
+
+SAP references: [TCP/SOCKS5 for cloud applications](https://help.sap.com/docs/connectivity/sap-btp-connectivity-cf/using-tcp-protocol-for-cloud-applications),
+[create and bind Connectivity](https://help.sap.com/docs/connectivity/sap-btp-connectivity-cf/create-and-bind-connectivity-service-instance),
+[Cloud Connector access control](https://help.sap.com/docs/connectivity/sap-btp-connectivity-cf/configure-access-control), and
+[subaccount separation](https://help.sap.com/docs/connectivity/sap-btp-connectivity-cf/managing-subaccounts?locale=en).
 
 Binding selection and token handling fail closed: malformed or multiple Connectivity bindings,
 missing SOCKS5 credentials, an insecure token URL, an OAuth rejection, a partial route, or a token
 with a `Bearer ` prefix stops before the SAP socket opens. The token is cached only until shortly
-before expiry and is never included in tool output or inspected configuration.
+before expiry and is never included in tool output or inspected configuration. The sample reads
+`onpremise_proxy_host` and `onpremise_socks5_proxy_port`; it never uses
+`onpremise_proxy_rfc_port`.
 
 ### Running `Custom_RfcSystemInfo`
 

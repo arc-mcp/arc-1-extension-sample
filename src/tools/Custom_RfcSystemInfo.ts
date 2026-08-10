@@ -6,7 +6,7 @@ import {
   pickDisclosedFields,
   readConnectivityBinding,
   redactRfcError,
-} from './rfc-redact.js';
+} from './rfc-security.js';
 
 // Classic RFC from an ARC-1 extension — and the security work that has to come with it.
 //
@@ -127,7 +127,7 @@ export default defineTool({
       await client.open();
       opened = true;
       const result = (await client.call(FUNCTION_MODULE, {})) as { RFCSI_EXPORT?: Record<string, unknown> };
-      // CONTROL 6: disclose an allowlist of fields, not the whole structure (see rfc-redact.ts).
+      // CONTROL 6: disclose an allowlist of fields, not the whole structure (see rfc-security.ts).
       const info = pickDisclosedFields(result.RFCSI_EXPORT ?? {});
       const text = Object.entries(info)
         .map(([field, value]) => `${field}: ${value}`)
