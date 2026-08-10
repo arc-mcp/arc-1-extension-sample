@@ -138,8 +138,8 @@ tuple. `SAMPLE_RFC_GWHOST` and `SAMPLE_RFC_GWSERV` select a dedicated Cloud Conn
 virtual mapping to the SAP gateway (`33NN`); `SAMPLE_RFC_ASHOST` remains the actual application
 server identity carried by CPIC. `SAMPLE_RFC_LOCATION_ID` is optional.
 
-This route requires open-rfc 0.3.0 or newer; the package dependency intentionally waits for that
-feature release rather than installing an unbuilt Git checkout. It is pinned to exactly `0.3.0`,
+This route requires open-rfc 0.2.3 or newer; the package dependency intentionally waits for that
+feature release rather than installing an unbuilt Git checkout. It is pinned to exactly `0.2.3`,
 not a range. Until that version is published, installation from npm is expected to fail and this
 sample PR must remain draft.
 
