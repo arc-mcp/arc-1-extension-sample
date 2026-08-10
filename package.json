@@ -10,7 +10,7 @@
     "test": "npm run build && node --test test/*.test.mjs"
   },
   "engines": {
-    "node": "^22.14.0 || ^24.0.0"
+    "node": "^22.19.0 || ^24.0.0"
   },
   "peerDependencies": {
     "arc-1": ">=0.10.0"
