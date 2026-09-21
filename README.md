@@ -15,6 +15,7 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 | `Custom_QuerySalesOrders` | OData (`GWSAMPLE_BASIC`) | code tier (GET, `Accept: application/json`) |
 | `Custom_ReadProgram` | ADT | **manifest tier** (declarative JSON) |
 | `Custom_RunClass` | ADT classrun | code tier — **executes** an `IF_OO_ADT_CLASSRUN` console class |
+| `Custom_RunReport` | custom ICF (`ZARC1_REPORT_RUNNER`) | code tier — executes an exact-allowlisted classic report through a user-supplied backend contract |
 | `Custom_CreateSalesOrder` | OData (`GWSAMPLE_BASIC`) | code tier — **writes** (`ctx.http.post`, gated; HTTP 201 verified) |
 | `Custom_ListLanguages` | custom ICF ([LISA](https://github.com/ClementRingot/LISA) `ZI18N_SERVICE`) | code tier — list languages (POST; HTTP 200 verified) |
 | `Custom_GetTranslation` | custom ICF (LISA `ZI18N_SERVICE`) | code tier — read a translation (POST; HTTP 200 verified) |
@@ -23,6 +24,9 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 
 Reads go through the gated `ctx.http` (`GET`/`HEAD`) → `checkOperation` + scope + audit.
 `Custom_RunClass` runs a console class via `ctx.run.classRun` (a named, gated op).
+`Custom_RunReport` demonstrates the separate pattern needed for a classic executable report: a
+gated POST to a fixed custom ICF endpoint. ARC-1 does not currently expose a named report-run
+operation, and this repository does not ship the ABAP backend.
 `Custom_CreateSalesOrder` and the LISA tools **write** via `ctx.http.post` to a non-ADT path
 (OData / custom ICF). ADT **object** writes (CLAS/DDLS/…) stay a **v2** item (the package-aware
 `ctx.write` vocabulary) — see `arc-1` `docs/research/extension-framework-v2-spec.md`.
@@ -60,6 +64,72 @@ SAP_ALLOW_PLUGIN_RAW_WRITES=true SAP_ALLOW_WRITES=true \
 # → HTTP 201 + the created SalesOrder (live-verified on a4h / S/4HANA 2023).
 # With either opt-in off the call is refused; a write to a /sap/bc/adt/ path is always refused.
 ```
+
+### Running `Custom_RunReport` (classic report through custom ICF)
+
+`ctx.run.classRun` only executes an `IF_OO_ADT_CLASSRUN` class; it cannot start a classic executable
+program. This sample shows the extension route for systems that deliberately expose report
+execution through a custom service:
+
+```text
+POST /sap/bc/http/sap/ZARC1_REPORT_RUNNER/run
+Content-Type: application/json
+
+{
+  "report": "ZDEMO_REPORT",
+  "variant": "DAILY",
+  "parameters": { "P_CARRID": "LH" },
+  "capture_alv": true,
+  "max_rows": 100
+}
+```
+
+The endpoint must return bounded JSON and echo the exact report name:
+
+```json
+{
+  "status": "success",
+  "report": "ZDEMO_REPORT",
+  "runtime_ms": 42,
+  "rows": [{ "CARRID": "LH" }],
+  "total_rows": 1,
+  "truncated": false
+}
+```
+
+The TypeScript tool is intentionally narrow:
+
+- `availableOn: 'onprem'`, `scope: 'write'`, and `opType: Workflow` reflect that executing a report
+  can mutate SAP state even when it only appears to produce a list.
+- `SAMPLE_REPORT_EXECUTION_ENABLED=true` is a report-specific, default-off switch.
+- `SAMPLE_REPORT_ALLOWLIST` is a comma-separated **exact-name** allowlist; empty entries and
+  wildcards fail closed. The backend must independently enforce its own allowlist and SAP
+  authorization — an extension-side check is defense in depth, not the security boundary.
+- The path is a constant, not caller input. Selection values are never logged. The request permits
+  at most 200 ALV rows, and the tool refuses a response larger than 256 KiB.
+- Because the service uses `POST`, ARC-1 also requires `SAP_ALLOW_PLUGIN_RAW_WRITES=true`,
+  `SAP_ALLOW_WRITES=true`, and a caller with the `write` scope. `SAP_ALLOW_PLUGIN_EXECUTE` applies
+  only to the named `classRun` operation and is not the gate for this custom ICF call.
+
+The custom ABAP handler is deliberately out of scope for this pure-TypeScript repository. Treat it
+as privileged code: authenticate the caller, authorize each report, enforce the allowlist again,
+reject interactive/dynpro reports, bound runtime and output, clean up ALV runtime state on every
+path, and audit report + variant without logging sensitive selection values.
+
+With that endpoint installed:
+
+```sh
+SAMPLE_REPORT_EXECUTION_ENABLED=true \
+SAMPLE_REPORT_ALLOWLIST=ZDEMO_REPORT,ZDAILY_CHECK \
+SAP_ALLOW_PLUGIN_RAW_WRITES=true SAP_ALLOW_WRITES=true \
+ARC1_PLUGINS=$PWD/dist/index.js \
+  arc1-cli call Custom_RunReport \
+  --json '{"report":"ZDEMO_REPORT","variant":"DAILY","parameters":{"P_CARRID":"LH"},"maxRows":100}'
+```
+
+`npm test` verifies the default-off gate, exact allowlist, fixed endpoint, normalized payload, and
+response/report binding without needing a live SAP system. The custom backend itself still needs
+its own ABAP and integration tests.
 
 ## RFC: a different trust boundary
 
@@ -250,3 +320,6 @@ ARC1_PLUGINS=$PWD/dist/index.js  arc1-cli call Custom_ProgramLineCount --json '{
 manifest-tier `Custom_ReadProgram` return real ABAP source through the gated `ctx.http`, and
 `Custom_RunClass` executes a console class (`ctx.run.classRun`) and returns its real output — with the
 three safety gates (opt-in off / `allowWrites` off / bad class name) all refusing as expected.
+
+`Custom_RunReport` is **contract-tested, not live-verified**: it requires a user-supplied
+`ZARC1_REPORT_RUNNER` ICF handler, which this pure-TypeScript sample intentionally does not install.
