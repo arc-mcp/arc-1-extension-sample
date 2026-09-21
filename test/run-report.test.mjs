@@ -18,3 +18,10 @@ test('makes an empty SAP list result explicit', async () => {
 
   assert.equal(result.content[0].text, '(report ran, no list output)');
 });
+
+test('passes SAP error text through without inferring success from the HTTP status', async () => {
+  const ctx = createMockToolContext({ programRunOutput: 'Error: Program does not exist!' });
+  const result = await runReport.handler({ reportName: 'ZDOES_NOT_EXIST' }, ctx);
+
+  assert.equal(result.content[0].text, 'Error: Program does not exist!');
+});

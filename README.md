@@ -81,7 +81,10 @@ The endpoint is deliberately **name-in/text-out**: it does not accept selection-
 a variant. Use a small `IF_OO_ADT_CLASSRUN` class when runtime input is required. Report execution is
 a mutation vector even when a report appears read-only, so ARC-1 requires the same three gates as
 `classRun`: `SAP_ALLOW_PLUGIN_EXECUTE=true`, `SAP_ALLOW_WRITES=true`, and the `write` scope. The
-sample is `availableOn: 'onprem'`; SAP still applies the calling user's execute authorization.
+sample is `availableOn: 'onprem'`; SAP still applies the calling user's execute authorization. As
+with `classRun`, SAP can return execution errors such as `Error: Program does not exist!` as text
+with HTTP 200, so the ARC-1 tool call itself has a successful status. The sample returns that text
+verbatim and does not infer success from the transport status.
 
 ## RFC: a different trust boundary
 

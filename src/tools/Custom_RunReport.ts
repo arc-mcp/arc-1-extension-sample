@@ -10,7 +10,7 @@ import { defineTool, OperationType } from 'arc-1/public';
 export default defineTool({
   name: 'Custom_RunReport',
   description:
-    'Execute an active classic ABAP report and return its list output. No selection parameters or variants. ' +
+    'Execute an active classic ABAP report and return SAP list or error text; SAP may return errors in a successful tool result. No selection parameters or variants. ' +
     'Requires SAP_ALLOW_PLUGIN_EXECUTE=true + SAP_ALLOW_WRITES=true and the write scope.',
   schema: z.object({
     reportName: z
