@@ -15,6 +15,7 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 | `Custom_QuerySalesOrders` | OData (`GWSAMPLE_BASIC`) | code tier (GET, `Accept: application/json`) |
 | `Custom_ReadProgram` | ADT | **manifest tier** (declarative JSON) |
 | `Custom_RunClass` | ADT classrun | code tier — **executes** an `IF_OO_ADT_CLASSRUN` console class |
+| `Custom_RunReport` | ADT programrun | code tier — **executes** a classic report and returns its list output |
 | `Custom_CreateSalesOrder` | OData (`GWSAMPLE_BASIC`) | code tier — **writes** (`ctx.http.post`, gated; HTTP 201 verified) |
 | `Custom_ListLanguages` | custom ICF ([LISA](https://github.com/ClementRingot/LISA) `ZI18N_SERVICE`) | code tier — list languages (POST; HTTP 200 verified) |
 | `Custom_GetTranslation` | custom ICF (LISA `ZI18N_SERVICE`) | code tier — read a translation (POST; HTTP 200 verified) |
@@ -22,7 +23,8 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 | `Custom_RfcSystemInfo` | **classic RFC** (`RFC_SYSTEM_INFO` via [open-rfc](https://github.com/marianfoo/open-rfc)) | code tier — read **off** `ctx.http`, so it brings its own controls ([below](#rfc-a-different-trust-boundary)) |
 
 Reads go through the gated `ctx.http` (`GET`/`HEAD`) → `checkOperation` + scope + audit.
-`Custom_RunClass` runs a console class via `ctx.run.classRun` (a named, gated op).
+`Custom_RunClass` and `Custom_RunReport` use ARC-1's named, gated ADT operations
+(`ctx.run.classRun` / `ctx.run.programRun`). No custom ICF service is needed for either.
 `Custom_CreateSalesOrder` and the LISA tools **write** via `ctx.http.post` to a non-ADT path
 (OData / custom ICF). ADT **object** writes (CLAS/DDLS/…) stay a **v2** item (the package-aware
 `ctx.write` vocabulary) — see `arc-1` `docs/research/extension-framework-v2-spec.md`.
@@ -60,6 +62,29 @@ SAP_ALLOW_PLUGIN_RAW_WRITES=true SAP_ALLOW_WRITES=true \
 # → HTTP 201 + the created SalesOrder (live-verified on a4h / S/4HANA 2023).
 # With either opt-in off the call is refused; a write to a /sap/bc/adt/ path is always refused.
 ```
+
+### Running `Custom_RunReport` (classic report through ADT)
+
+`ctx.run.programRun` executes an active classic executable report (`PROG`) through SAP's native ADT
+program-run endpoint and returns its classic `WRITE` list as plain text. No custom ICF service or
+`SAP_ALLOW_PLUGIN_RAW_WRITES` is needed.
+
+```sh
+SAP_ALLOW_PLUGIN_EXECUTE=true SAP_ALLOW_WRITES=true \
+ARC1_PLUGINS=$PWD/dist/index.js \
+  arc1-cli call Custom_RunReport \
+  --json '{"reportName":"ZARC1_TEST_REPORT"}'
+# → the report list as text
+```
+
+The endpoint is deliberately **name-in/text-out**: it does not accept selection-screen parameters or
+a variant. Use a small `IF_OO_ADT_CLASSRUN` class when runtime input is required. Report execution is
+a mutation vector even when a report appears read-only, so ARC-1 requires the same three gates as
+`classRun`: `SAP_ALLOW_PLUGIN_EXECUTE=true`, `SAP_ALLOW_WRITES=true`, and the `write` scope. The
+sample is `availableOn: 'onprem'`; SAP still applies the calling user's execute authorization. As
+with `classRun`, SAP can return execution errors such as `Error: Program does not exist!` as text
+with HTTP 200, so the ARC-1 tool call itself has a successful status. The sample returns that text
+verbatim and does not infer success from the transport status.
 
 ## RFC: a different trust boundary
 
@@ -250,3 +275,7 @@ ARC1_PLUGINS=$PWD/dist/index.js  arc1-cli call Custom_ProgramLineCount --json '{
 manifest-tier `Custom_ReadProgram` return real ABAP source through the gated `ctx.http`, and
 `Custom_RunClass` executes a console class (`ctx.run.classRun`) and returns its real output — with the
 three safety gates (opt-in off / `allowWrites` off / bad class name) all refusing as expected.
+
+`Custom_RunReport` is also **live-verified**: it executed `ZARC1_TEST_REPORT` through
+`ctx.run.programRun`, returned the report list, preserved SAP's text response for a missing program,
+and refused calls when either server gate was disabled or the name was invalid.

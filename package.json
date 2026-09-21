@@ -13,7 +13,7 @@
     "node": "^22.19.0 || ^24.0.0"
   },
   "peerDependencies": {
-    "arc-1": ">=0.10.0"
+    "arc-1": ">=1.4.0"
   },
   "dependencies": {
     "open-rfc": "0.2.3"
@@ -25,6 +25,6 @@
   },
   "arc1": {
     "apiVersion": 1,
-    "requires": { "scopes": ["read"], "packages": [] }
+    "requires": { "scopes": ["read", "write"], "packages": [] }
   }
 }

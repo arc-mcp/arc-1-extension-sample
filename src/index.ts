@@ -6,6 +6,7 @@ import programLineCount from './tools/Custom_ProgramLineCount.js';
 import querySalesOrders from './tools/Custom_QuerySalesOrders.js';
 import rfcSystemInfo from './tools/Custom_RfcSystemInfo.js';
 import runClass from './tools/Custom_RunClass.js';
+import runReport from './tools/Custom_RunReport.js';
 import setTranslation from './tools/Custom_SetTranslation.js';
 
 // Sample ARC-1 extension. Loaded via:
@@ -14,13 +15,14 @@ const plugin: Plugin = {
   name: 'arc1-plugin-example',
   version: '0.0.1',
   apiVersion: 1,
-  // Reads (ADT + OData), execute (gated console class), a gated OData write, a complete LISA
-  // integration (list languages → get translation → set translation, all via the custom ICF service),
-  // and a classic-RFC read that leaves `ctx.http` entirely (its own socket → its own controls).
+  // Reads (ADT + OData), named ADT execution (gated class + report), a gated OData write, a complete
+  // LISA integration (list languages → get translation → set translation, all via custom ICF), and a
+  // classic-RFC read that leaves `ctx.http` entirely (its own socket → its own controls).
   tools: [
     programLineCount,
     querySalesOrders,
     runClass,
+    runReport,
     createSalesOrder,
     listLanguages,
     getTranslation,
