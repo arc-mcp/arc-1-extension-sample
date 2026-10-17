@@ -7,14 +7,22 @@ not certification of a customer's roles, forms or deployment route.
 | --- | --- | --- | --- |
 | Companion syntax and activation | Pass | Pass | Pass |
 | Nine ABAP Unit tests | Pass | Pass | Pass |
+| Native SmartForm/SO10 reads through the handler (without HTTP) | Pass | Covered by CLI | Covered by CLI |
 | SAPscript, SO10 and SmartForm through the loaded CLI extension | Pending SICF setup | Pass | Pass |
-| Missing objects, invalid keys/language, reference refusal, no SAPscript language fallback | Pending SICF setup | Pass | Pass |
+| HTTP: missing objects, invalid keys/language, reference refusal, no SAPscript language fallback | Pending SICF setup | Pass | Pass |
 
 The 22-test TypeScript suite passes, including eight forms tests. Typechecking and abaplint's
 7.50 parser checks also pass.
 The ABAP denial tests force the authorization result to false; they do not verify PFCG roles.
 
-Live checks used temporary customer fixtures and standard SmartForm `SF_EXAMPLE_01`:
+Eight additional read-only integration checks passed on 7.50 through a temporary ABAP Unit class,
+using the installed handler and real SAP APIs without authorization overrides. They verified
+SmartForm XML/layout/symbols, English/German/Catalan requests, German UTF-8, SO10 lines matching
+`READ_TEXT`, missing objects, invalid language, and SAPscript refusing fallback to client 000.
+Client 001 contains no SAPscript form fixture. The temporary test class was removed; these checks
+do not verify HTTP routing, ICF authentication, or a successful SAPscript read on 7.50.
+
+The 2023/2025 HTTP checks used temporary customer fixtures and standard SmartForm `SF_EXAMPLE_01`:
 
 - SAPscript returned its header, one page and two windows, with ITF and format tables.
 - SO10 preserved UTF-8, symbols and an unexpanded `INCLUDE` command exactly. A header reference
@@ -36,11 +44,12 @@ the companion class and dedicated service remain installed there.
 ## Remaining deployment checks
 
 - Complete the 7.50 SICF setup and repeat live reads. This test system has no ADT report-run
-  endpoint and its WebGUI returns 403, so service creation needs an administrator.
+  endpoint, WebGUI returns 403, and SAP GUI scripting is disabled. Service setup and a SAPscript
+  fixture remain necessary for full HTTP coverage.
 - Verify a real allowed and denied SAP user for each kind; then repeat through the intended
   Cloud Foundry / Cloud Connector / principal-propagation route. Only direct Basic access was tested.
 - Test the reporter's `LE_SHP_DELNOTE` quantity node on their 7.50 system; that form is absent
-  on the available 2023/2025 systems. The equivalent missing-text mechanism was verified above.
+  on all three available classic systems. The equivalent missing-text mechanism was verified above.
 - Verify abapGit import in the target package. Test installation used ADT source upload;
   the serialized repository has not yet been round-tripped through abapGit.
 
