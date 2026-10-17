@@ -31,8 +31,8 @@ HTTP checks on all three systems used temporary customer fixtures and standard S
   including `TEXT_CARRID` / `WA_BOOKING-CARRID`. XML namespace declarations were present.
 - English, German and lowercase Catalan (`c`) requests returned valid XML on all three systems.
   German umlauts survived UTF-8 conversion. On 2023/2025, an untranslated node omitted its display
-  `TEXT` for Catalan,
-  retaining the English/German `T_TEXT` entries; it did not fall back to German display text.
+  `TEXT` for Catalan, retaining the English/German `T_TEXT` entries; it did not fall back to German
+  display text.
   Unknown language `?` returned 400. The new lowercase-key ABAP test also passed on 7.50.
 - CLI reads passed on all three systems with all runtime write and plugin execution gates disabled.
 - A local MCP HTTP server against 2023 hid and refused the tool for `viewer`; `viewer-data`
@@ -40,9 +40,10 @@ HTTP checks on all three systems used temporary customer fixtures and standard S
   the companion returned 401 on 7.50 and 2023. This checks MCP scopes and authenticated ICF,
   not SAP role denial.
 
-Temporary fixture forms/texts and setup reports were removed from 2023/2025 after testing;
-7.50 fixture cleanup is pending. The companion class and dedicated service remain installed on
-all three systems.
+Temporary fixture forms/texts and helper reports were removed from all three systems after testing.
+On 7.50, follow-up reads confirmed the fixtures and reports were absent, and the companion service
+still returned a successful SmartForm response. The companion class and dedicated service remain
+installed on all three systems.
 
 ## Remaining deployment checks
 
