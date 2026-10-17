@@ -8,8 +8,8 @@ not certification of a customer's roles, forms or deployment route.
 | Companion syntax and activation | Pass | Pass | Pass |
 | Nine ABAP Unit tests | Pass | Pass | Pass |
 | Native SmartForm/SO10 reads through the handler (without HTTP) | Pass | Covered by CLI | Covered by CLI |
-| SAPscript, SO10 and SmartForm through the loaded CLI extension | Pending SICF setup | Pass | Pass |
-| HTTP: missing objects, invalid keys/language, reference refusal, no SAPscript language fallback | Pending SICF setup | Pass | Pass |
+| SAPscript, SO10 and SmartForm through the loaded CLI extension | Pass | Pass | Pass |
+| HTTP: missing objects, invalid keys/language, reference refusal, no SAPscript language fallback | Pass | Pass | Pass |
 
 The 22-test TypeScript suite passes, including eight forms tests. Typechecking and abaplint's
 7.50 parser checks also pass.
@@ -19,33 +19,34 @@ Eight additional read-only integration checks passed on 7.50 through a temporary
 using the installed handler and real SAP APIs without authorization overrides. They verified
 SmartForm XML/layout/symbols, English/German/Catalan requests, German UTF-8, SO10 lines matching
 `READ_TEXT`, missing objects, invalid language, and SAPscript refusing fallback to client 000.
-Client 001 contains no SAPscript form fixture. The temporary test class was removed; these checks
-do not verify HTTP routing, ICF authentication, or a successful SAPscript read on 7.50.
+The temporary test class was removed. After SICF setup and fixture creation, the 7.50 HTTP and
+CLI checks below also passed, including a successful SAPscript read in client 001.
 
-The 2023/2025 HTTP checks used temporary customer fixtures and standard SmartForm `SF_EXAMPLE_01`:
+HTTP checks on all three systems used temporary customer fixtures and standard SmartForm `SF_EXAMPLE_01`:
 
 - SAPscript returned its header, one page and two windows, with ITF and format tables.
 - SO10 preserved UTF-8, symbols and an unexpanded `INCLUDE` command exactly. A header reference
   returned 409; nonexistent objects returned 404.
 - SmartForm XML included pages/windows and `NOLANGUAGE=X` nodes with their actual symbols,
   including `TEXT_CARRID` / `WA_BOOKING-CARRID`. XML namespace declarations were present.
-- English, German and lowercase Catalan (`c`) requests returned valid XML on 2023/2025. German
-  umlauts survived UTF-8 conversion. An untranslated node omitted its display `TEXT` for Catalan,
-  retaining the English/German `T_TEXT` entries; it did not fall back to German display text.
+- English, German and lowercase Catalan (`c`) requests returned valid XML on all three systems.
+  German umlauts survived UTF-8 conversion. On 2023/2025, an untranslated node omitted its display
+  `TEXT` for Catalan, retaining the English/German `T_TEXT` entries; it did not fall back to German
+  display text.
   Unknown language `?` returned 400. The new lowercase-key ABAP test also passed on 7.50.
-- CLI reads passed on 2023/2025 with all runtime write and plugin execution gates disabled.
+- CLI reads passed on all three systems with all runtime write and plugin execution gates disabled.
 - A local MCP HTTP server against 2023 hid and refused the tool for `viewer`; `viewer-data`
   could list and call it, even with the server's SQL/data-preview gates off. Anonymous access to
-  the companion returned 401. This checks MCP scopes and authenticated ICF, not SAP role denial.
+  the companion returned 401 on 7.50 and 2023. This checks MCP scopes and authenticated ICF,
+  not SAP role denial.
 
-Temporary fixture forms/texts and setup reports were removed from 2023/2025 after testing;
-the companion class and dedicated service remain installed there.
+Temporary fixture forms/texts and helper reports were removed from all three systems after testing.
+On 7.50, follow-up reads confirmed the fixtures and reports were absent, and the companion service
+still returned a successful SmartForm response. The companion class and dedicated service remain
+installed on all three systems.
 
 ## Remaining deployment checks
 
-- Complete the 7.50 SICF setup and repeat live reads. This test system has no ADT report-run
-  endpoint, WebGUI returns 403, and SAP GUI scripting is disabled. Service setup and a SAPscript
-  fixture remain necessary for full HTTP coverage.
 - Verify a real allowed and denied SAP user for each kind; then repeat through the intended
   Cloud Foundry / Cloud Connector / principal-propagation route. Only direct Basic access was tested.
 - Test the reporter's `LE_SHP_DELNOTE` quantity node on their 7.50 system; that form is absent
