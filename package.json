@@ -1,13 +1,14 @@
 {
   "name": "arc-1-extension-sample",
   "version": "0.0.1",
-  "description": "Sample ARC-1 extension plugin (playground). Pure TS, no ABAP. Targets the @experimental arc-1/public API.",
+  "description": "ARC-1 extension examples, including a separate optional ABAP forms companion. Targets the @experimental arc-1/public API.",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && node -e \"require('node:fs').cpSync('manifests','dist/manifests',{recursive:true})\"",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test test/*.test.mjs"
+    "test": "npm run build && node --test test/*.test.mjs",
+    "test:forms:live": "npm run build && node test/forms.live.mjs"
   },
   "engines": {
     "node": "^22.19.0 || ^24.0.0"

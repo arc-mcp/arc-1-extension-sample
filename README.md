@@ -1,6 +1,7 @@
 # arc-1-extension-sample
 
-A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **no ABAP**.
+A **sample ARC-1 extension** — the playground for FEAT-61. The default plugin is TypeScript only.
+The separate [forms sample](docs/forms.md) includes an optional ABAP companion.
 
 > Consumes the **`@experimental` `arc-1/public` API**. It is the smoke test for the FEAT-61
 > extension framework (`arc-1` `docs/research/extension-framework-spec.md`). **Verified live
@@ -8,6 +9,10 @@ A **sample ARC-1 extension** — the playground for FEAT-61. Pure TypeScript, **
 > release (it declares `apiVersion`).
 
 ## What it demonstrates
+
+For SAPscript, SO10 and SmartForms, load `dist/forms.js` separately after installing its
+[companion service](docs/forms.md). This adds `Custom_ReadForm` using authenticated GET requests
+and the `data` scope; it is not part of the default plugin below.
 
 | Tool | SAP API | Style |
 |------|---------|-------|
@@ -264,10 +269,11 @@ ARC1_PLUGINS=$PWD/dist/index.js  arc1-cli call Custom_ProgramLineCount --json '{
 
 - Tool names are `Custom_*` (reserved namespace; collisions fail-fast at load).
 - Each tool declares `policy: { scope, opType }` — gated exactly like a built-in (reuses the 7 scopes + allow\* ceiling; **no custom scopes**).
-- `package.json#arc1.requires` declares the scopes/packages the plugin needs. This is a **v2**
+- `package.json#arc1.requires` describes the default entry point's scopes/packages. This is a **v2**
   declaration (intersected with the server ceiling, never expands it) — **not yet enforced in v1**,
   where the runtime scope + safety ceiling already gate every call. Kept here as a forward example.
-- Pure TS — **no ABAP artifacts**. Custom endpoints (if any) must already exist on the SAP system.
+- Extensions do not install backend code. Custom endpoints must already exist; the forms sample's
+  optional ABAP companion is installed separately by an SAP administrator.
 
 ## Status
 
